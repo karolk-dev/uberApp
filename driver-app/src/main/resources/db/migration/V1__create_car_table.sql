@@ -1,0 +1,9 @@
+CREATE TABLE car (
+   id BIGSERIAL PRIMARY KEY,
+   uuid VARCHAR(255) NOT NULL,
+   brand VARCHAR(255) NOT NULL,
+   model VARCHAR(255) NOT NULL,
+   license_plate VARCHAR(255),
+   category VARCHAR(255) NOT NULL,
+   is_active BOOLEAN DEFAULT TRUE
+);

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Driver Login & Registration</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin-bottom: 30px; padding: 20px; border: 1px solid #ccc; border-radius: 5px; }
+        input { margin: 5px 0; padding: 8px; width: 250px; }
+        button { padding: 10px 15px; margin-top: 10px; cursor: pointer; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+<h1>Driver Portal</h1>
+
+<!-- Rejestracja -->
+<div class="section">
+    <h2>Rejestracja</h2>
+    <form id="registerForm">
+        <input type="text" id="regName" placeholder="Imię i nazwisko" required><br>
+        <input type="text" id="regNip" placeholder="NIP" required><br>
+        <input type="password" id="regPassword" placeholder="Hasło" required><br>
+        <input type="email" id="regEmail" placeholder="Email" required><br>
+        <button type="submit">Zarejestruj</button>
+    </form>
+    <div id="regError" class="error"></div>
+</div>
+
+<!-- Logowanie -->
+<div class="section">
+    <h2>Logowanie</h2>
+    <form id="loginForm">
+        <input type="text" id="logUsername" placeholder="Nazwa użytkownika" required><br>
+        <input type="password" id="logPassword" placeholder="Hasło" required><br>
+        <button type="submit">Zaloguj</button>
+    </form>
+    <div id="loginError" class="error"></div>
+</div>
+
+<script>
+    // Funkcja dekodująca JWT
+    function decodeJwt(token) {
+        try {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+            return JSON.parse(jsonPayload);
+        } catch (error) {
+            console.error("Błąd dekodowania tokena JWT:", error);
+            return null;
+        }
+    }
+
+    // Rejestracja
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = {
+            name: document.getElementById('regName').value,
+            nip: document.getElementById('regNip').value,
+            password: document.getElementById('regPassword').value,
+            email: document.getElementById('regEmail').value
+        };
+
+        try {
+            const response = await fetch('http://localhost:8080/driver-app/api/drivers/register', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                alert('Rejestracja udana! Możesz się zalogować.');
+                document.getElementById('regError').textContent = '';
+            } else {
+                const error = await response.text();
+                document.getElementById('regError').textContent = error;
+            }
+        } catch (error) {
+            console.error('Błąd rejestracji:', error);
+            document.getElementById('regError').textContent = 'Błąd połączenia';
+        }
+    });
+
+    // Logowanie
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = {
+            username: document.getElementById('logUsername').value,
+            password: document.getElementById('logPassword').value
+        };
+
+        try {
+            const response = await fetch('http://localhost:8080/driver-app/api/drivers/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                const { access_token } = await response.json();
+                const decoded = decodeJwt(access_token);
+
+                localStorage.setItem('driverJwt', access_token);
+                localStorage.setItem('driverUuid', decoded.sub);
+
+                window.location.href = 'driverMenuWithChat.html'; // Przekieruj do panelu
+            } else {
+                const error = await response.text();
+                document.getElementById('loginError').textContent = error;
+            }
+        } catch (error) {
+            console.error('Błąd logowania:', error);
+            document.getElementById('loginError').textContent = 'Błąd połączenia';
+        }
+    });
+</script>
+</body>
+</html>

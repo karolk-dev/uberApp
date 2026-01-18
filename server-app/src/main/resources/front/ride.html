@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8" />
+    <title>Przejazd w toku</title>
+
+    <!-- Style do Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+
+    <!-- SockJS i STOMP.js do WebSocketów -->
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1.6.1/dist/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+
+    <!-- Skrypt Leaflet (JS) -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+        }
+        #container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+        /* Panel czatu po lewej, mapa po prawej */
+        #chatPanel {
+            width: 300px;
+            border-right: 1px solid #ccc;
+            padding: 20px;
+            background-color: #f8f9fa;
+            display: flex;
+            flex-direction: column;
+        }
+        #mapContainer {
+            flex: 1;
+            height: 100%;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        /* Lista wiadomości w czacie */
+        #messages {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 8px;
+            background: #fff;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        /* Pola input i przycisk wysyłania */
+        #messageInput {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<div id="container">
+    <!-- Panel czatu -->
+    <div id="chatPanel">
+        <h3>Czat z kierowcą</h3>
+        <div id="messages"></div>
+        <input type="text" id="messageInput" placeholder="Napisz wiadomość...">
+        <button onclick="sendMessage()">Wyślij</button>
+    </div>
+
+    <!-- Kontener mapy -->
+    <div id="mapContainer">
+        <div id="map"></div>
+    </div>
+</div>
+
+<script>
+    // -------------------- Zmienne globalne --------------------
+    let map;
+    let driverMarker;
+
+    // STOMP client do czatu
+    let stompChatClient = null;
+
+    // Pobieramy Uuid z localStorage (zapisane podczas logowania / akceptowania przejazdu)
+    let clientUuid = localStorage.getItem('clientUuid');
+    let driverUuid = localStorage.getItem('driverUuid');
+
+    // Odczyt parametru z URL (np. "?rideId=...")
+    let rideUuid = getRideUuidFromUrl();
+
+    // -------------------- Funkcje pomocnicze --------------------
+    // Odczyt "rideId" z query param
+    function getRideUuidFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('rideId'); // np. "f69b9a61-9db6-4af0-bf54-aac635d23161"
+    }
+
+    // -------------------- Inicjalizacja mapy --------------------
+    function initMap() {
+        map = L.map('map').setView([52.237049, 21.017532], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(map);
+
+        // Ikona kierowcy (przykładowa)
+        const driverIcon = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/47/47179.png',
+            iconSize: [32, 32]
+        });
+
+        // Domyślna (startowa) pozycja kierowcy - do zmiany jak tylko dostaniemy dane
+        driverMarker = L.marker([52.237049, 21.017532], { icon: driverIcon }).addTo(map);
+    }
+
+    // -------------------- Subskrypcja pozycji kierowcy --------------------
+    function connectDriverLocationWebSocket() {
+        const socket = new SockJS('http://localhost:8082/ws');
+        const stompClient = Stomp.over(socket);
+
+        stompClient.connect({}, () => {
+            console.log("Połączono z WebSocket (driver location)");
+
+            // Nasłuchuj na `/topic/driver-location/{driverUuid}`
+            // Zakładamy, że driverUuid jest unikalny dla kierowcy
+            stompClient.subscribe(`/topic/driver-location/${driverUuid}`, (message) => {
+                const coords = JSON.parse(message.body);
+                updateDriverPosition(coords);
+            });
+        }, (error) => {
+            console.error('Błąd połączenia WebSocket (driver location):', error);
+        });
+    }
+
+    // Aktualizacja pozycji kierowcy (dane z backendu)
+    function updateDriverPosition(coords) {
+        // Załóżmy, że backend wysyła { latitude, longitude }
+        const newLatLng = L.latLng(coords.latitude, coords.longitude);
+        driverMarker.setLatLng(newLatLng);
+        map.panTo(newLatLng);
+    }
+
+    // -------------------- Subskrypcja czatu --------------------
+    function connectChatWebSocket() {
+        const socket = new SockJS('http://localhost:8082/ws');
+        stompChatClient = Stomp.over(socket);
+
+        stompChatClient.connect({}, () => {
+            console.log('Połączono z WebSocket (CHAT)');
+
+            // Nasłuchuj wiadomości dla klienta: /topic/chat.{clientUuid}
+            stompChatClient.subscribe(`/topic/chat.${clientUuid}`, (message) => {
+                const chatMessage = JSON.parse(message.body);
+                displayIncomingMessage(chatMessage);
+            });
+
+        }, (error) => {
+            console.error('Błąd połączenia WebSocket (CHAT):', error);
+        });
+    }
+
+    // -------------------- Wysyłanie wiadomości --------------------
+    function sendMessage() {
+        const input = document.getElementById('messageInput');
+        const content = input.value.trim();
+        if (!content) return;
+
+        // Budujemy obiekt ChatMessage
+        const chatMessage = {
+            rideUuid: rideUuid,
+            recipient: driverUuid,  // Kierowca będzie odbiorcą
+            sender: clientUuid,     // My (klient)
+            content: content,
+            timestamp: new Date().toISOString()
+        };
+
+        // Wysyłamy na /app/chat.send (po stronie serwera: @MessageMapping("/chat.send"))
+        stompChatClient.send("/app/chat.send", {}, JSON.stringify(chatMessage));
+
+        // Wyświetlamy sobie od razu wiadomość (lub czekamy na echo z serwera - jak wolisz)
+        displayOutgoingMessage(chatMessage);
+
+        // Czyścimy input
+        input.value = '';
+    }
+
+    // -------------------- Wyświetlanie wiadomości (czat) --------------------
+    function displayIncomingMessage(chatMessage) {
+        const container = document.getElementById('messages');
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message';
+        msgDiv.textContent = `Kierowca: ${chatMessage.content}`;
+        container.appendChild(msgDiv);
+
+        // Przewiń w dół (jeśli wiadomości jest dużo)
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function displayOutgoingMessage(chatMessage) {
+        const container = document.getElementById('messages');
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message';
+        msgDiv.textContent = `Ty: ${chatMessage.content}`;
+        container.appendChild(msgDiv);
+
+        container.scrollTop = container.scrollHeight;
+    }
+
+    // -------------------- Start (po załadowaniu strony) --------------------
+    initMap();
+    connectDriverLocationWebSocket();
+    connectChatWebSocket();
+</script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stripe Card Test</title>
+    <script src="https://js.stripe.com/v3/"></script>
+    <style>
+        #card-element {
+          border: 1px solid #ccc;
+          padding: 10px;
+          border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+<h1>Dodaj kartę</h1>
+<form id="payment-form">
+    <div id="card-element"></div>
+    <button type="submit" id="submit-button">Dodaj kartę</button>
+</form>
+<div id="card-errors" role="alert"></div>
+<script>
+    // Stripe.js setup
+    const stripe = Stripe("pk_test_51QcVTTP3sTZkwfUJMHOBdu2KzmzGlDtrCnRQxJ362jKLakGKVdWKd6hXXq0MT7UxM04g4Re9FJCh7aGmpBY8vb5Z0017VrGozB"); // Zamień na swój publiczny klucz Stripe
+    const elements = stripe.elements();
+
+    // Tworzenie Card Element
+    const cardElement = elements.create("card");
+    cardElement.mount("#card-element");
+
+    // Obsługa formularza
+    const form = document.getElementById("payment-form");
+    const cardErrors = document.getElementById("card-errors");
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const { token, error } = await stripe.createToken(cardElement);
+
+      if (error) {
+        // Wyświetl błędy użytkownikowi
+        cardErrors.textContent = error.message;
+      } else {
+        // Pomyślnie utworzony token
+        console.log("Token utworzony:", token);
+        alert(`Token ID: ${token.id}`);
+        // Możesz przesłać token do backendu
+      }
+    });
+</script>
+</body>
+</html>

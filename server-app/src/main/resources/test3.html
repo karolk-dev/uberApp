@@ -1,0 +1,158 @@
+<!--<!DOCTYPE html>-->
+<!--<html lang="pl">-->
+<!--<head>-->
+<!--    <meta charset="UTF-8">-->
+<!--    <title>Testowy Front WebSocket STOMP z Akceptacją/Odrzuceniem</title>-->
+<!--    &lt;!&ndash; Ładujemy bibliotekę stomp.js (wersja 2.3.3) &ndash;&gt;-->
+<!--    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>-->
+<!--    &lt;!&ndash; Opcjonalnie: stylizacja &ndash;&gt;-->
+<!--    <style>-->
+<!--        body { font-family: Arial, sans-serif; margin: 20px; }-->
+<!--        .message { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }-->
+<!--        .buttons { margin-top: 10px; }-->
+<!--        button { margin-right: 5px; }-->
+<!--    </style>-->
+<!--    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />-->
+<!--    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>-->
+<!--</head>-->
+<!--<body>-->
+<!--<h1>Testowy Front WebSocket STOMP</h1>-->
+<!--<button id="connectBtn">Połącz</button>-->
+<!--<button id="disconnectBtn" disabled>Rozłącz</button>-->
+<!--<div id="status">Status: Nie połączono</div>-->
+
+<!--<h3>Odebrane propozycje przejazdu:</h3>-->
+<!--<div id="messages"></div>-->
+
+
+<!--<script>-->
+<!--    let client;  // klient STOMP-->
+<!--    const connectBtn = document.getElementById("connectBtn");-->
+<!--    const disconnectBtn = document.getElementById("disconnectBtn");-->
+<!--    const statusDiv = document.getElementById("status");-->
+<!--    const messagesDiv = document.getElementById("messages");-->
+
+<!--    // Adres Twojego endpointu WebSocket-->
+<!--    const socketUrl = "ws://localhost:8083/ws-driver";-->
+<!--    // Topic – zastąp UUID drivera właściwym identyfikatorem-->
+<!--    const topic = "/topic/driver/81cabe83-1726-46b1-8ff2-eb3fd9a2016f";-->
+
+<!--    // Funkcja nawiązująca połączenie i subskrypcję-->
+<!--    function connect() {-->
+<!--      const socket = new WebSocket(socketUrl);-->
+<!--      client = Stomp.over(socket);-->
+<!--      client.debug = null; // wyłączenie logów debug-->
+
+<!--      client.connect({}, function(frame) {-->
+<!--        statusDiv.textContent = "Status: Połączono (" + frame + ")";-->
+<!--        disconnectBtn.disabled = false;-->
+<!--        connectBtn.disabled = true;-->
+<!--        console.log("Connected: " + frame);-->
+
+<!--        // Subskrypcja topicu-->
+<!--        client.subscribe(topic, function(message) {-->
+<!--          // Parsujemy otrzymaną wiadomość-->
+<!--          let data;-->
+<!--          try {-->
+<!--            data = JSON.parse(message.body);-->
+<!--          } catch(e) {-->
+<!--            console.error("Błąd parsowania JSON:", e);-->
+<!--            data = message.body;-->
+<!--          }-->
+<!--          console.log("Otrzymano wiadomość:", data);-->
+<!--          displayRideProposal(data);-->
+<!--        });-->
+<!--      }, function(error) {-->
+<!--        statusDiv.textContent = "Status: Błąd połączenia (" + error + ")";-->
+<!--        console.error("Błąd połączenia STOMP:", error);-->
+<!--      });-->
+<!--    }-->
+
+<!--    // Funkcja rozłączająca klienta-->
+<!--    function disconnect() {-->
+<!--      if (client) {-->
+<!--        client.disconnect(function() {-->
+<!--          statusDiv.textContent = "Status: Rozłączono";-->
+<!--          disconnectBtn.disabled = true;-->
+<!--          connectBtn.disabled = false;-->
+<!--          console.log("Disconnected");-->
+<!--        });-->
+<!--      }-->
+<!--    }-->
+
+<!--    // Funkcja wyświetlająca propozycję przejazdu oraz przyciski akceptacji/odrzucenia-->
+<!--    function displayRideProposal(proposal) {-->
+<!--      // Oczekujemy, że propozycja zawiera np. rideUuid oraz driverUuid (oraz inne dane np. pickupLocation, dropoffLocation)-->
+<!--      const div = document.createElement("div");-->
+<!--      div.className = "message";-->
+
+<!--      // Wyświetlamy podstawowe dane – dostosuj do swoich pól-->
+<!--      div.innerHTML = `-->
+<!--        <strong>Ride ID:</strong> ${proposal.rideUuid}<br>-->
+<!--        <strong>Driver UUID:</strong> ${proposal.driverUuid}<br>-->
+<!--        <strong>Pickup:</strong> ${proposal.pickupLocation || "Brak danych"}<br>-->
+<!--        <strong>Dropoff:</strong> ${proposal.dropoffLocation || "Brak danych"}-->
+<!--      `;-->
+
+<!--      // Dodajemy przyciski-->
+<!--      const buttonsDiv = document.createElement("div");-->
+<!--      buttonsDiv.className = "buttons";-->
+
+<!--      const acceptBtn = document.createElement("button");-->
+<!--      acceptBtn.textContent = "Akceptuj";-->
+<!--      acceptBtn.addEventListener("click", function() {-->
+<!--        sendRideResponse(proposal.rideUuid, proposal.driverUuid, true);-->
+<!--        // Opcjonalnie usuń element z listy po akceptacji:-->
+<!--        div.style.borderColor = "green";-->
+<!--        acceptBtn.disabled = true;-->
+<!--        rejectBtn.disabled = true;-->
+<!--      });-->
+
+<!--      const rejectBtn = document.createElement("button");-->
+<!--      rejectBtn.textContent = "Odrzuć";-->
+<!--      rejectBtn.addEventListener("click", function() {-->
+<!--        sendRideResponse(proposal.rideUuid, proposal.driverUuid, false);-->
+<!--        // Opcjonalnie zmień kolor obramowania:-->
+<!--        div.style.borderColor = "red";-->
+<!--        acceptBtn.disabled = true;-->
+<!--        rejectBtn.disabled = true;-->
+<!--      });-->
+
+<!--      buttonsDiv.appendChild(acceptBtn);-->
+<!--      buttonsDiv.appendChild(rejectBtn);-->
+<!--      div.appendChild(buttonsDiv);-->
+<!--      messagesDiv.appendChild(div);-->
+<!--    }-->
+
+<!--    // Funkcja wysyłająca odpowiedź przejazdu (akceptacja/odrzucenie)-->
+<!--    function sendRideResponse(rideUuid, driverUuid, accepted) {-->
+<!--      // Endpoint, do którego wysyłasz odpowiedź (z prefiksem /app)-->
+<!--      const responseEndpoint = "/app/driver/ride/response";-->
+<!--      const responsePayload = {-->
+<!--        rideUuid: rideUuid,-->
+<!--        driverUuid: driverUuid,-->
+<!--        accepted: accepted-->
+<!--      };-->
+<!--      // Wysyłamy wiadomość przez STOMP-->
+<!--      client.send(responseEndpoint, {}, JSON.stringify(responsePayload));-->
+<!--      console.log("Wysłano odpowiedź:", responsePayload);-->
+<!--    }-->
+
+<!--    // Nasłuchamy zdarzeń przycisków-->
+<!--    connectBtn.addEventListener("click", connect);-->
+<!--    disconnectBtn.addEventListener("click", disconnect);-->
+<!--</script>-->
+<!--<div id="map" style="height: 400px; margin-bottom: 20px;"></div>-->
+<!--<script>-->
+<!--    // Inicjalizacja mapy i ustawienie domyślnego widoku-->
+<!--const map = L.map('map').setView([52.2297, 21.0122], 13); // Warszawa jako przykładowa lokalizacja-->
+
+<!--// Dodajemy warstwę z OpenStreetMap-->
+<!--L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {-->
+<!--    maxZoom: 19,-->
+<!--    attribution: '© OpenStreetMap'-->
+<!--}).addTo(map);-->
+
+<!--</script>-->
+<!--</body>-->
+<!--</html>-->

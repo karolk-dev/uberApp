@@ -1,0 +1,81 @@
+<!--<!DOCTYPE html>-->
+<!--<html lang="pl">-->
+<!--<head>-->
+<!--    <meta charset="UTF-8">-->
+<!--    <title>Testowy Front WebSocket STOMP</title>-->
+<!--    &lt;!&ndash; Wczytanie biblioteki stomp.js z CDN (wersja 2.3.3) &ndash;&gt;-->
+<!--    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>-->
+<!--</head>-->
+<!--<body>-->
+<!--<h1>Testowy Front WebSocket STOMP</h1>-->
+<!--<button id="connectBtn">Połącz</button>-->
+<!--<button id="disconnectBtn" disabled>Rozłącz</button>-->
+<!--<div id="status">Status: Nie połączono</div>-->
+<!--<h3>Odebrane wiadomości:</h3>-->
+<!--<ul id="messages"></ul>-->
+
+<!--<script>-->
+<!--    let client;  // obiekt klienta STOMP-->
+<!--    const connectBtn = document.getElementById("connectBtn");-->
+<!--    const disconnectBtn = document.getElementById("disconnectBtn");-->
+<!--    const statusDiv = document.getElementById("status");-->
+<!--    const messagesList = document.getElementById("messages");-->
+
+<!--    // Podaj tutaj adres Twojego endpointu WebSocket (bez SockJS)-->
+<!--    const socketUrl = "ws://localhost:8083/ws-driver";-->
+<!--    // Przykładowy topic – zastąp "3fbc9b8f-3515-4a3b-b552-5ee9d4dcbf83" swoim UUID-->
+<!--    const topic = "/topic/driver/3fbc9b8f-3515-4a3b-b552-5ee9d4dcbf83";-->
+
+<!--    function connect() {-->
+<!--      // Utwórz nowe połączenie WebSocket-->
+<!--      const socket = new WebSocket(socketUrl);-->
+<!--      // Stwórz klienta STOMP na bazie tego połączenia-->
+<!--      client = Stomp.over(socket);-->
+
+<!--      // Opcjonalnie możesz wyłączyć logi, aby konsola była czytelniejsza:-->
+<!--      client.debug = null;-->
+
+<!--      // Połącz klienta STOMP-->
+<!--      client.connect({}, function(frame) {-->
+<!--        statusDiv.textContent = "Status: Połączono (" + frame + ")";-->
+<!--        disconnectBtn.disabled = false;-->
+<!--        connectBtn.disabled = true;-->
+<!--        console.log("Connected: " + frame);-->
+
+<!--        // Subskrybuj wskazany topic-->
+<!--        client.subscribe(topic, function(message) {-->
+<!--          // Jeśli wiadomość ma payload w formacie JSON, sparsuj go:-->
+<!--          let body = message.body;-->
+<!--          try {-->
+<!--            body = JSON.parse(message.body);-->
+<!--          } catch (e) {-->
+<!--            console.log("Nie można sparsować JSON: ", e);-->
+<!--          }-->
+<!--          console.log("Otrzymano wiadomość:", body);-->
+<!--          // Dodaj wiadomość do listy-->
+<!--          const li = document.createElement("li");-->
+<!--          li.textContent = JSON.stringify(body);-->
+<!--          messagesList.appendChild(li);-->
+<!--        });-->
+<!--      }, function(error) {-->
+<!--        statusDiv.textContent = "Status: Błąd połączenia (" + error + ")";-->
+<!--        console.error("Błąd połączenia STOMP:", error);-->
+<!--      });-->
+<!--    }-->
+
+<!--    function disconnect() {-->
+<!--      if (client !== null) {-->
+<!--        client.disconnect(function() {-->
+<!--          statusDiv.textContent = "Status: Rozłączono";-->
+<!--          disconnectBtn.disabled = true;-->
+<!--          connectBtn.disabled = false;-->
+<!--          console.log("Disconnected");-->
+<!--        });-->
+<!--      }-->
+<!--    }-->
+
+<!--    connectBtn.addEventListener("click", connect);-->
+<!--    disconnectBtn.addEventListener("click", disconnect);-->
+<!--</script>-->
+<!--</body>-->
+<!--</html>-->

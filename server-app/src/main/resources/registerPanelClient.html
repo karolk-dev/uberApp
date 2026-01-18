@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Client App</title>
+</head>
+<body>
+<h1>Client Registration & Login</h1>
+
+<!-- Formularz rejestracji -->
+<h2>Rejestracja</h2>
+<form id="registerForm">
+    <label for="regUsername">Username:</label>
+    <input type="text" id="regUsername" name="regUsername" required><br><br>
+
+    <label for="regPassword">Password:</label>
+    <input type="password" id="regPassword" name="regPassword" required><br><br>
+
+    <label for="regEmail">Email:</label>
+    <input type="email" id="regEmail" name="regEmail" required><br><br>
+
+    <button type="submit">Zarejestruj</button>
+</form>
+
+<hr>
+
+<!-- Formularz logowania -->
+<h2>Logowanie</h2>
+<form id="loginForm">
+    <label for="logUsername">Username:</label>
+    <input type="text" id="logUsername" name="logUsername" required><br><br>
+
+    <label for="logPassword">Password:</label>
+    <input type="password" id="logPassword" name="logPassword" required><br><br>
+
+    <button type="submit">Zaloguj</button>
+</form>
+
+<script>
+    const registerForm = document.getElementById('registerForm');
+    const loginForm = document.getElementById('loginForm');
+
+    // Obsługa rejestracji
+    registerForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const username = document.getElementById('regUsername').value;
+      const password = document.getElementById('regPassword').value;
+      const email = document.getElementById('regEmail').value;
+
+      // Obiekt, który wysyłamy w body do endpointu rejestracji:
+      const data = {
+        username: username,
+        password: password,
+        email: email
+      };
+
+      try {
+        const response = await fetch('http://localhost:8080/client-app/api/clients/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log('Rejestracja udana:', result);
+          alert('Rejestracja zakończona sukcesem!');
+        } else {
+          // Błąd zwrócony przez serwer (np. walidacja)
+          const errorText = await response.text();
+          console.error('Błąd rejestracji:', errorText);
+          alert('Błąd rejestracji: ' + errorText);
+        }
+      } catch (error) {
+        console.error('Błąd podczas rejestracji:', error);
+        alert('Wystąpił błąd w trakcie rejestracji.');
+      }
+    });
+
+    // Obsługa logowania
+    loginForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const username = document.getElementById('logUsername').value;
+      const password = document.getElementById('logPassword').value;
+
+      // Obiekt, który wysyłamy w body do endpointu logowania:
+      const data = {
+        username: username,
+        password: password
+      };
+
+      try {
+        const response = await fetch('http://localhost:8080/client-app/api/clients/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+          // TokenResponse { accessToken: '...' }
+          const tokenResponse = await response.json();
+          console.log('Logowanie udane. Otrzymany obiekt:', tokenResponse);
+
+          // Zapisz token w localStorage
+          localStorage.setItem('accessToken', tokenResponse.accessToken);
+
+          alert('Zalogowano pomyślnie. Token zapisany w localStorage.');
+        } else {
+          const errorText = await response.text();
+          console.error('Błąd logowania:', errorText);
+          alert('Błąd logowania: ' + errorText);
+        }
+      } catch (error) {
+        console.error('Błąd podczas logowania:', error);
+        alert('Wystąpił błąd w trakcie logowania.');
+      }
+    });
+</script>
+</body>
+</html>

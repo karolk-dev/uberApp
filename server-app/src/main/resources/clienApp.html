@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8" />
+    <title>Uber Client App</title>
+
+    <!-- Dodaj style Leaflet -->
+    <link
+            rel="stylesheet"
+            href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+            crossorigin=""
+    />
+
+    <!-- Skrypt Leaflet (JS) -->
+    <script
+            src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            crossorigin=""
+    ></script>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        h1, h2 {
+            margin: 10px 0;
+        }
+
+        /* Kontener główny – po zalogowaniu będzie zawierał lewy panel i mapę */
+        #appContainer {
+            display: flex;   /* układ poziomy */
+            flex-direction: row;
+            width: 100%;
+            height: 90vh;    /* aby zająć większość okna */
+            display: none;   /* na start ukrywamy (przed zalogowaniem) */
+        }
+
+        /* Lewy panel z formularzami i interfejsem Ubera */
+        #leftPanel {
+            width: 30%;
+            min-width: 300px;
+            padding: 20px;
+            box-sizing: border-box;
+            border-right: 1px solid #ccc;
+            background-color: #f8f9fa;
+        }
+
+        /* Mapa z Leaflet po prawej stronie */
+        #mapContainer {
+            width: 70%;
+            height: 100%;
+            position: relative;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Drobne stylowanie formularzy */
+        form {
+            margin-bottom: 20px;
+        }
+        label {
+            display: inline-block;
+            width: 100px;
+            margin-bottom: 5px;
+        }
+        input[type="text"], input[type="password"], input[type="email"] {
+            width: 80%;
+            padding: 5px;
+            margin-bottom: 10px;
+        }
+        button {
+            margin-top: 10px;
+            padding: 10px 15px;
+            cursor: pointer;
+        }
+
+        /* Styl sekcji produktów i cen */
+        .productItem {
+            margin: 5px 0;
+        }
+        .productName {
+            font-weight: bold;
+        }
+        .productPrice {
+            margin-left: 10px;
+            color: green;
+        }
+    </style>
+</head>
+
+<body>
+<h1>Uber - Client Registration & Login</h1>
+
+<!-- Sekcja rejestracji -->
+<div id="registerSection">
+    <h2>Rejestracja</h2>
+    <form id="registerForm">
+        <label for="regName">Username:</label>
+        <input type="text" id="regName" name="regName" required><br>
+
+        <label for="regPassword">Password:</label>
+        <input type="password" id="regPassword" name="regPassword" required><br>
+
+        <label for="regEmail">Email:</label>
+        <input type="email" id="regEmail" name="regEmail" required><br>
+
+        <button type="submit">Zarejestruj</button>
+    </form>
+</div>
+
+<hr>
+
+<!-- Sekcja logowania -->
+<div id="loginSection">
+    <h2>Logowanie</h2>
+    <form id="loginForm">
+        <label for="logUsername">Username:</label>
+        <input type="text" id="logUsername" name="logUsername" required><br>
+
+        <label for="logPassword">Password:</label>
+        <input type="password" id="logPassword" name="logPassword" required><br>
+
+        <button type="submit">Zaloguj</button>
+    </form>
+</div>
+
+<!-- Główny interfejs aplikacji, widoczny tylko po zalogowaniu -->
+<div id="appContainer">
+    <!-- Lewy panel -->
+    <div id="leftPanel">
+        <h2>Tworzenie przejazdu</h2>
+        <form id="rideForm">
+            <label for="pickup">Miejsce odbioru:</label>
+            <input type="text" id="pickup" placeholder="Np. ul. Marszałkowska 1" required><br>
+
+            <label for="destination">Cel podróży:</label>
+            <input type="text" id="destination" placeholder="Np. ul. Długa 10" required><br>
+
+            <h3>Wybierz rodzaj przejazdu:</h3>
+            <div>
+                <input type="radio" id="productUberX" name="product" value="UberX" checked>
+                <label for="productUberX">UberX</label>
+            </div>
+            <div>
+                <input type="radio" id="productUberComfort" name="product" value="UberComfort">
+                <label for="productUberComfort">UberComfort</label>
+            </div>
+            <div>
+                <input type="radio" id="productUberPets" name="product" value="UberPets">
+                <label for="productUberPets">UberPets</label>
+            </div>
+            <div>
+                <input type="radio" id="productUberGreen" name="product" value="UberGreen">
+                <label for="productUberGreen">UberGreen</label>
+            </div>
+
+            <button type="button" id="checkPriceBtn">Sprawdź ceny</button>
+            <button type="submit" id="orderRideBtn">Zamów przejazd</button>
+        </form>
+
+        <h3>Ceny:</h3>
+        <div class="productItem">
+            <span class="productName">UberX:</span>
+            <span id="uberXPrice" class="productPrice"></span>
+        </div>
+        <div class="productItem">
+            <span class="productName">UberComfort:</span>
+            <span id="uberComfortPrice" class="productPrice"></span>
+        </div>
+        <div class="productItem">
+            <span class="productName">UberPets:</span>
+            <span id="uberPetsPrice" class="productPrice"></span>
+        </div>
+        <div class="productItem">
+            <span class="productName">UberGreen:</span>
+            <span id="uberGreenPrice" class="productPrice"></span>
+        </div>
+    </div>
+
+    <!-- Prawa część z mapą -->
+    <div id="mapContainer">
+        <div id="map"></div>
+    </div>
+</div>
+
+<!-- Twój skrypt aplikacji -->
+<script>
+    // ------------------- ELEMENTY DOM -------------------
+    const registerForm    = document.getElementById('registerForm');
+    const loginForm       = document.getElementById('loginForm');
+    const registerSection = document.getElementById('registerSection');
+    const loginSection    = document.getElementById('loginSection');
+    const appContainer    = document.getElementById('appContainer');
+
+    // Formularz tworzenia przejazdu
+    const rideForm      = document.getElementById('rideForm');
+    const checkPriceBtn = document.getElementById('checkPriceBtn');
+
+    // Pola ceny produktów
+    const uberXPriceField       = document.getElementById('uberXPrice');
+    const uberComfortPriceField = document.getElementById('uberComfortPrice');
+    const uberPetsPriceField    = document.getElementById('uberPetsPrice');
+    const uberGreenPriceField   = document.getElementById('uberGreenPrice');
+
+    // Zmienna na mapę (ustawimy ją w funkcji initMap)
+    let map;
+
+    // Zmienne globalne na markery (pickup i destination)
+    let pickupMarker = null;
+    let destinationMarker = null;
+
+    // ------------------- FUNKCJA INICJALIZACJI MAPY -------------------
+    function initMap() {
+        // Ustawiamy współrzędne na centrum Warszawy
+        map = L.map('map').setView([52.237049, 21.017532], 12);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(map);
+    }
+
+    // ------------------- FUNKCJA GEOKODOWANIA (Nominatim) -------------------
+    async function geocodeAddress(address) {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+            if (data && data.length > 0) {
+                return {
+                    lat: data[0].lat,
+                    lon: data[0].lon
+                };
+            } else {
+                return null;
+            }
+        } catch (error) {
+            console.error("Błąd podczas geokodowania:", error);
+            return null;
+        }
+    }
+
+    // ------------------- OBSŁUGA REJESTRACJI -------------------
+    registerForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const name     = document.getElementById('regName').value;
+        const password = document.getElementById('regPassword').value;
+        const email    = document.getElementById('regEmail').value;
+
+        const data = { name, password, email };
+
+        try {
+            const response = await fetch('http://localhost:8080/client-app/api/clients/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Rejestracja udana:', result);
+                alert('Rejestracja zakończona sukcesem!');
+            } else {
+                const errorText = await response.text();
+                console.error('Błąd rejestracji:', errorText);
+                alert('Błąd rejestracji: ' + errorText);
+            }
+        } catch (error) {
+            console.error('Błąd podczas rejestracji:', error);
+            alert('Wystąpił błąd w trakcie rejestracji.');
+        }
+    });
+
+    // ------------------- OBSŁUGA LOGOWANIA -------------------
+    loginForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const username = document.getElementById('logUsername').value;
+        const password = document.getElementById('logPassword').value;
+
+        const data = { username, password };
+
+        try {
+            // Zwróć uwagę na poprawny URL i port do Twojego backendu
+            const response = await fetch('http://localhost:8082/client-app/api/clients/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                const tokenResponse = await response.json();
+                console.log('Logowanie udane. Otrzymany obiekt:', tokenResponse);
+
+                // Zapisz token w localStorage
+                localStorage.setItem('accessToken', tokenResponse.accessToken);
+
+                alert('Zalogowano pomyślnie. Token zapisany w localStorage.');
+
+                // Ukryj formularze logowania i rejestracji, pokaż główny interfejs
+                registerSection.style.display = 'none';
+                loginSection.style.display = 'none';
+                appContainer.style.display = 'flex';
+
+                // Inicjujemy mapę dopiero teraz, gdy kontener jest widoczny
+                initMap();
+
+            } else {
+                const errorText = await response.text();
+                console.error('Błąd logowania:', errorText);
+                alert('Błąd logowania: ' + errorText);
+            }
+        } catch (error) {
+            console.error('Błąd podczas logowania:', error);
+            alert('Wystąpił błąd w trakcie logowania.');
+        }
+    });
+
+    // ------------------- OBSŁUGA PRZYCISKÓW W APLIKACJI (ceny, zamówienie) -------------------
+    // Obsługa "Sprawdź ceny"
+    checkPriceBtn.addEventListener('click', async () => {
+        const pickup = document.getElementById('pickup').value;
+        const destination = document.getElementById('destination').value;
+
+        // Geokodujemy oba adresy:
+        const pickupCoords = await geocodeAddress(pickup);
+        const destinationCoords = await geocodeAddress(destination);
+
+        // Sprawdź, czy udało się zgeokodować oba adresy
+        if (!pickupCoords || !destinationCoords) {
+            alert("Nie udało się zgeokodować adresów. Sprawdź poprawność wpisanych danych.");
+            return;
+        }
+
+        console.log("pickupCoords =", pickupCoords);
+        console.log("destinationCoords =", destinationCoords);
+
+        // Usuwamy poprzednie markery z mapy (jeśli istnieją)
+        if (pickupMarker) {
+            map.removeLayer(pickupMarker);
+        }
+        if (destinationMarker) {
+            map.removeLayer(destinationMarker);
+        }
+
+        // Dodajemy nowe markery na mapie
+        pickupMarker = L.marker([pickupCoords.lat, pickupCoords.lon]).addTo(map);
+        destinationMarker = L.marker([destinationCoords.lat, destinationCoords.lon]).addTo(map);
+
+        // Dopasuj widok mapy, by pokazać oba punkty
+        const bounds = L.latLngBounds(
+            [pickupCoords.lat, pickupCoords.lon],
+            [destinationCoords.lat, destinationCoords.lon]
+        );
+        map.fitBounds(bounds);
+
+        // Tu możesz w przyszłości wysłać pickupCoords i destinationCoords do backendu,
+        // żeby obliczyć rzeczywistą cenę bazując na odległości.
+
+        // Przykładowe, statyczne ceny:
+        const prices = {
+            UberX: '15 PLN',
+            UberComfort: '25 PLN',
+            UberPets: '20 PLN',
+            UberGreen: '18 PLN'
+        };
+
+        // Wyświetl ceny w interfejsie
+        uberXPriceField.textContent       = prices.UberX;
+        uberComfortPriceField.textContent = prices.UberComfort;
+        uberPetsPriceField.textContent    = prices.UberPets;
+        uberGreenPriceField.textContent   = prices.UberGreen;
+
+        console.log('Ceny zaktualizowane. (Dane przykładowe)');
+    });
+
+    // Obsługa "Zamów przejazd"
+    rideForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const pickup      = document.getElementById('pickup').value;
+        const destination = document.getElementById('destination').value;
+        const product     = document.querySelector('input[name="product"]:checked').value;
+
+        // Przykładowe wywołanie (placeholder, bez realnego backendu):
+        console.log('Zamawiam przejazd:', { pickup, destination, product });
+        alert(`Przejazd zamówiony!\nOdbiór: ${pickup}\nCel: ${destination}\nProdukt: ${product}`);
+    });
+</script>
+</body>
+</html>

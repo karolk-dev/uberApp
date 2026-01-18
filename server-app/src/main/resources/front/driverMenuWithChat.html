@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel Kierowcy</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <!-- SockJS i STOMP -->
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Lewy panel */
+        #leftPanel {
+            width: 30%;
+            min-width: 350px;
+            padding: 20px;
+            border-right: 1px solid #ccc;
+            background-color: #f8f9fa;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Prawy panel z mapą */
+        #rightPanel {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Sekcje w lewym panelu */
+        .panelSection {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* Mapa */
+        #map {
+            flex: 1;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+
+        /* Chat */
+        #chatMessages {
+            height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+
+        /* Formularze */
+        .inputGroup {
+            margin-bottom: 15px;
+        }
+        .inputGroup label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .inputGroup input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        /* Przyciski */
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+
+        /* Nagłówek */
+        #header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Lewy panel -->
+<div id="leftPanel">
+    <div id="header">
+        <h2>Panel Kierowcy</h2>
+        <button id="logoutBtn">Wyloguj</button>
+    </div>
+
+    <!-- Sekcja czatu -->
+    <div class="panelSection">
+        <h3>Chat</h3>
+        <div id="chatMessages"></div>
+        <div class="inputGroup">
+            <input type="text" id="chatInput" placeholder="Wpisz wiadomość...">
+            <button onclick="sendMessage()">Wyślij</button>
+        </div>
+    </div>
+
+    <!-- Sekcja zarobków -->
+    <div class="panelSection">
+        <h3>Zarobki</h3>
+        <div class="inputGroup">
+            <label>Od:</label>
+            <input type="date" id="startDate">
+        </div>
+        <div class="inputGroup">
+            <label>Do:</label>
+            <input type="date" id="endDate">
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 10px;">
+            <button onclick="searchEarnings()">Szukaj</button>
+            <button onclick="monthlyEarnings()">Miesiąc</button>
+            <button onclick="yearlyEarnings()">Rok</button>
+        </div>
+    </div>
+
+    <!-- Sekcja raportów -->
+    <div class="panelSection">
+        <h3>Generuj raport</h3>
+        <div class="inputGroup">
+            <label>Od:</label>
+            <input type="date" id="reportStart">
+        </div>
+        <div class="inputGroup">
+            <label>Do:</label>
+            <input type="date" id="reportEnd">
+        </div>
+        <button onclick="generateReport()">Pobierz CSV</button>
+    </div>
+
+    <!-- Przycisk rozpoczęcia przejazdu -->
+    <div class="panelSection">
+        <button style="width: 100%; background: #28a745;"
+                onclick="startRide()">
+            🚕 Rozpocznij przejazd
+        </button>
+    </div>
+</div>
+
+<!-- Prawy panel -->
+<div id="rightPanel">
+    <div id="map"></div>
+    <h3 style="margin-top: 20px;">Aktywne przejazdy:</h3>
+    <div id="messages"></div>
+</div>
+
+<script>
+    let map;
+    let stompClient = null;
+
+    // Przyjmijmy, że po zaakceptowaniu przejazdu zapamiętujemy te zmienne,
+    // aby wiedzieć do jakiego klienta wysyłać wiadomości.
+    let currentRideUuid = null;
+    let currentClientUuid = null;
+
+    // 1. Dekodowanie polyline (jeśli używasz w ogóle w swoim projekcie)
+    function decodePolyline(encoded) {
+        let points = [];
+        let index = 0;
+        let lat = 0;
+        let lng = 0;
+
+        while (index < encoded.length) {
+            let b, shift = 0, result = 0;
+            do {
+                b = encoded.charCodeAt(index++) - 63;
+                result |= (b & 0x1f) << shift;
+                shift += 5;
+            } while (b >= 0x20);
+
+            let dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+            lat += dlat;
+
+            shift = 0;
+            result = 0;
+            do {
+                b = encoded.charCodeAt(index++) - 63;
+                result |= (b & 0x1f) << shift;
+                shift += 5;
+            } while (b >= 0x20);
+
+            let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+            lng += dlng;
+
+            points.push([lat / 1e5, lng / 1e5]);
+        }
+        return points;
+    }
+
+    // 2. Inicjalizacja mapy Leaflet
+    function initMap() {
+        map = L.map('map').setView([52.2297, 21.0122], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+    }
+
+    // 3. Połączenie STOMP i subskrypcje
+    function connectAndSubscribe() {
+        const socket = new SockJS('http://localhost:8083/ws-driver');
+        stompClient = Stomp.over(socket);
+
+        stompClient.connect({}, function () {
+            console.log('Połączono z STOMP');
+            const driverUuid = localStorage.getItem('driverUuid');
+            if (driverUuid) {
+
+                // Subskrypcja na /topic/driver/{driverUuid} (propozycje przejazdu)
+                stompClient.subscribe('/topic/driver/' + driverUuid, function (message) {
+                    const rideProposal = JSON.parse(message.body);
+                    console.log('Otrzymano propozycję przejazdu:', rideProposal);
+
+                    // Rozkodowanie trasy
+                    const routeToDestination = decodePolyline(rideProposal.polyline);
+
+                    // Rysujemy polyline na mapie
+                    const polylineLayer = L.polyline(routeToDestination, { color: 'blue' });
+                    polylineLayer.addTo(map);
+                    map.fitBounds(polylineLayer.getBounds());
+
+                    // Wyświetlamy w prawym panelu
+                    const messagesDiv = document.getElementById('messages');
+                    messagesDiv.innerHTML = `
+                        <p>Otrzymałeś nową propozycję przejazdu!</p>
+                        <p>rideUuid: ${rideProposal.rideUuid}</p>
+                        <button onclick="acceptRide('${rideProposal.rideUuid}', '${rideProposal.clientUuid}')">Akceptuj</button>
+                        <button onclick="rejectRide('${rideProposal.rideUuid}', '${rideProposal.clientUuid}')">Odrzuć</button>
+                    `;
+                });
+
+                // Subskrypcja na /topic/chat/{driverUuid} – odbiór wiadomości czatu
+                stompClient.subscribe('/topic/chat/' + driverUuid, function (message) {
+                    const chatMessage = JSON.parse(message.body);
+                    console.log("Odebrano wiadomość czatową:", chatMessage);
+                    displayIncomingMessage(chatMessage);
+                });
+
+            } else {
+                console.warn('Brak driverUuid w localStorage!');
+            }
+        });
+    }
+
+    // 4. Wyświetlanie odebranej wiadomości w polu czatu
+    function displayIncomingMessage(chatMessage) {
+        const chatMessagesDiv = document.getElementById('chatMessages');
+        const messageElement = document.createElement('div');
+        messageElement.style.margin = '5px 0';
+
+        const sender = chatMessage.sender;
+        const content = chatMessage.content;
+        // Możesz użyć chatMessage.timestamp albo new Date() – zależy od formatu z backendu
+        const timestamp = chatMessage.timestamp ? chatMessage.timestamp : new Date().toISOString();
+
+        messageElement.textContent = `${sender}: ${content} (${timestamp})`;
+        chatMessagesDiv.appendChild(messageElement);
+
+        // Scroll do dołu
+        chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
+    }
+
+    // 5. Wysyłanie wiadomości z pola tekstowego
+    function sendMessage() {
+        const driverUuid = localStorage.getItem('driverUuid');
+        const input = document.getElementById('chatInput');
+        const content = input.value.trim();
+
+        if (!content) {
+            return;
+        }
+
+        const chatMessage = {
+            rideUuid: currentRideUuid,
+            recipient: currentClientUuid,
+            sender: driverUuid,
+            content: content,
+            timestamp: new Date().toISOString() // lub null, wtedy backend ustawi
+        };
+
+        // Wysyłamy do /app/chat.send (patrz @MessageMapping w kontrolerze)
+        stompClient.send("/app/chat.send", {}, JSON.stringify(chatMessage));
+
+        console.log('Wysłano wiadomość:', chatMessage);
+        input.value = '';
+    }
+
+    // 6. Funkcje do obsługi zarobków/raportów - przykładowe
+    function searchEarnings() {
+        const start = document.getElementById('startDate').value;
+        const end = document.getElementById('endDate').value;
+        console.log('Szukam zarobków od', start, 'do', end);
+    }
+    function monthlyEarnings() {
+        console.log('Zarobki miesięczne');
+    }
+    function yearlyEarnings() {
+        console.log('Zarobki roczne');
+    }
+    function generateReport() {
+        const start = document.getElementById('reportStart').value;
+        const end = document.getElementById('reportEnd').value;
+        console.log('Generuj raport CSV od', start, 'do', end);
+    }
+
+    // 7. Rozpoczęcie przejazdu
+    function startRide() {
+        console.log('Rozpoczęto przejazd');
+    }
+
+    // 8. Akceptacja przejazdu – zapamiętujemy rideUuid i clientUuid
+    function acceptRide(rideUuid, clientUuid) {
+        currentRideUuid = rideUuid;
+        currentClientUuid = clientUuid;
+
+        const driverUuid = localStorage.getItem('driverUuid');
+        const response = {
+            driverUuid: driverUuid,
+            rideUuid: rideUuid,
+            accepted: true,
+            clientUid: clientUuid
+        };
+
+        stompClient.send("/app/driver/ride/response", {}, JSON.stringify(response));
+        console.log("Wysłano akceptację przejazdu:", response);
+    }
+
+    // 9. Odrzucenie przejazdu
+    function rejectRide(rideUuid, clientUuid) {
+        const driverUuid = localStorage.getItem('driverUuid');
+        const response = {
+            driverUuid: driverUuid,
+            rideUuid: rideUuid,
+            accepted: false,
+            clientUid: clientUuid
+        };
+
+        stompClient.send("/app/driver/ride/response", {}, JSON.stringify(response));
+        console.log("Wysłano odrzucenie przejazdu:", response);
+    }
+
+    // 10. Po załadowaniu strony
+    document.addEventListener('DOMContentLoaded', () => {
+        initMap();
+        connectAndSubscribe();
+    });
+
+    // 11. Wylogowanie
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+        localStorage.removeItem('driverJwt');
+        localStorage.removeItem('driverUuid');
+        window.location.href = 'driver-login.html';
+    });
+</script>
+
+</body>
+</html>

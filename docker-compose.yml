@@ -1,0 +1,249 @@
+services:
+  # Bazy danych
+  client-db:
+    image: postgres:15
+    container_name: client-db
+    environment:
+      POSTGRES_DB: client_app_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - "5432:5432"
+    volumes:
+      - client-db-data:/var/lib/postgresql/data
+    healthcheck:
+      # Sprawdza czy serwer PostgreSQL jest gotowy do przyjmowania połączeń
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h localhost" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  driver-db:
+    image: postgres:15
+    container_name: driver-db
+    environment:
+      POSTGRES_DB: driver_app_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - "5433:5432"
+    volumes:
+      - driver-db-data:/var/lib/postgresql/data
+    healthcheck:
+      # Sprawdza czy serwer PostgreSQL jest gotowy do przyjmowania połączeń
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h localhost" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  server-db:
+    image: postgres:15
+    container_name: server-db
+    environment:
+      POSTGRES_DB: server_app_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - "5434:5432"
+    volumes:
+      - server-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h localhost" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:6.20
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - client-db
+      - driver-db
+      - server-db
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+
+  kafka:
+    image: wurstmeister/kafka:latest
+    container_name: kafka
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+#      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_HOST_NAME: kafka
+      KAFKA_ADVERTISED_PORT: 9092
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - zookeeper
+    healthcheck:
+      test: [ "CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1" ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  keycloak-db:
+    image: postgres:15
+    container_name: keycloak-db
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    ports:
+        - "5435:5432"
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:20.0.3
+    container_name: keycloak
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+    ports:
+      - "8085:8080"
+    depends_on:
+      - keycloak-db
+    command: start-dev
+    restart: unless-stopped
+
+
+  redis:
+      image: redis:latest
+      container_name: redis
+      ports:
+        - "6379:6379"
+      volumes:
+        - redis_data:/data
+      command: redis-server --appendonly yes  # włącza trwałe przechowywanie danych
+      healthcheck:
+        test: [ "CMD", "redis-cli", "ping" ]
+        interval: 5s
+        timeout: 3s
+        retries: 5
+
+  eureka:
+    build:
+      context: ./eureka-server-app
+    container_name: eureka
+    ports:
+      - "8761:8761"
+    environment:
+      - eureka.client.registerWithEureka=false
+      - eureka.client.fetchRegistry=false
+    depends_on:
+      kafka:
+        condition: service_healthy
+      client-db:
+        condition: service_healthy
+      driver-db:
+        condition: service_healthy
+      server-db:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8761/actuator/health || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  server-app:
+    image: server-app
+    build: ./server-app
+#    ports:
+#      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka:8761/eureka/
+    depends_on:
+      eureka:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+
+  driver-app:
+    build:
+      context: ./driver-app
+      dockerfile: Dockerfile
+    container_name: driver-app
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      eureka:
+        condition: service_healthy
+      driver-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+  client-app:
+    build:
+      context: ./client-app
+      dockerfile: Dockerfile
+    container_name: client-app
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      eureka:
+        condition: service_healthy
+      client-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      eureka:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+
+
+volumes:
+  client-db-data:
+  driver-db-data:
+  server-db-data:
+  keycloak-db-data:
+  redis_data:
