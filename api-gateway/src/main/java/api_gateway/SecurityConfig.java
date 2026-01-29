@@ -38,44 +38,6 @@ public class SecurityConfig {
         source.registerCorsConfiguration("/**", configuration);
         return source;
     }
-//
-//    @Bean
-//    public ReactiveJwtDecoder multiRealmJwtDecoder() {
-//        Map<String, ReactiveJwtDecoder> decoderMap = new HashMap<>();
-//
-//        // Utwórz dekodery dla każdego realmu
-//        String clientRealmUri = "http://localhost:8085/realms/client-app";
-//        String driverRealmUri = "http://localhost:8085/realms/driver-app";
-//
-//        decoderMap.put(clientRealmUri, NimbusReactiveJwtDecoder.withJwkSetUri(
-//                clientRealmUri + "/protocol/openid-connect/certs").build());
-//        decoderMap.put(driverRealmUri, NimbusReactiveJwtDecoder.withJwkSetUri(
-//                driverRealmUri + "/protocol/openid-connect/certs").build());
-//
-//        return token -> {
-//            // Najpierw spróbuj odczytać issuera z tokenu bez pełnej walidacji
-//            String issuer = null;
-//            try {
-//                JWT jwt = JWTParser.parse(token);
-//                JWTClaimsSet claims = jwt.getJWTClaimsSet();
-//                issuer = claims.getIssuer();
-//            } catch (Exception e) {
-//                throw new BadJwtException("Nie można sparsować tokenu JWT: " + e.getMessage());
-//            }
-//
-//            // Jeśli znaleziono issuera i istnieje odpowiedni dekoder, użyj go
-//            if (issuer != null && decoderMap.containsKey(issuer)) {
-//                return decoderMap.get(issuer).decode(token);
-//            }
-//
-//            // Jeśli nie znaleziono pasującego issuera, spróbuj wszystkich dekoderów po kolei
-//            return Flux.fromIterable(decoderMap.values())
-//                    .concatMap(decoder -> decoder.decode(token)
-//                            .onErrorResume(e -> Mono.empty()))
-//                    .next()
-//                    .switchIfEmpty(Mono.error(new BadJwtException("Żaden dekoder nie mógł zweryfikować tokenu")));
-//        };
-//    }
 
     @Bean
     public SecurityWebFilterChain securityFilterChain(ServerHttpSecurity serverHttpSecurity) {

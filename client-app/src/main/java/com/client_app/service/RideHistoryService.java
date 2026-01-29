@@ -33,13 +33,11 @@ public class RideHistoryService {
 
         log.info("Pobieranie historii przejazdów dla klienta: {}", clientUuid);
 
-        // Buduj URI ze wszystkimi parametrami
         UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(serverRidesUrl + "/client/" + clientUuid + "/history")
                 .queryParam("page", page)
                 .queryParam("size", size)
                 .queryParam("sort", sort);
 
-        // Dodaj parametry filtrowania, jeśli są dostępne
         if (filterDto != null) {
             if (filterDto.getStatus() != null) {
                 builder.queryParam("status", filterDto.getStatus());
@@ -55,7 +53,6 @@ public class RideHistoryService {
         String url = builder.toUriString();
         log.debug("URL żądania: {}", url);
 
-        // Użyj RestResponsePage z comm-lib
         ParameterizedTypeReference<RestResponsePage<RideHistoryDto>> responseType =
                 new ParameterizedTypeReference<>() {
                 };

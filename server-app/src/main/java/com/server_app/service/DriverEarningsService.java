@@ -62,7 +62,6 @@ public class DriverEarningsService {
         };
         csvWriter.writeNext(headers);
 
-        // Dane
         rides.forEach(ride -> {
             String[] line = {
                     ride.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")),

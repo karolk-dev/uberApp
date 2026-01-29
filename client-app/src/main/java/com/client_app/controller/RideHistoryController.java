@@ -25,7 +25,6 @@ public class RideHistoryController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "createdAt,desc") String sort) {
 
-        log.info("Otrzymano żądanie historii przejazdów dla klienta: {}", clientUuid);
 
         Page<RideHistoryDto> result = rideHistoryService.getClientRideHistory(
                 clientUuid, filterDto, page, size, sort);

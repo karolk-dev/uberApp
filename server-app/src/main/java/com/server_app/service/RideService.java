@@ -87,14 +87,14 @@ public class RideService {
 
         log.info("Szukanie historii");
 
-        // Tworzenie predykatu dla QueryDSL
+
         QRide ride = QRide.ride;
         BooleanBuilder predicate = new BooleanBuilder();
 
-        // Podstawowy warunek - przejazdy dla danego kierowcy
+
         predicate.and(ride.driverUuid.eq(driverUuid));
 
-        // Dodawanie warunków na podstawie kryteriów wyszukiwania
+
         if (searchCriteria.getStartDate() != null) {
             predicate.and(ride.createdAt.goe(searchCriteria.getStartDate()));
         }
@@ -115,7 +115,7 @@ public class RideService {
             predicate.and(ride.paymentType.eq(searchCriteria.getPaymentType()));
         }
 
-        // Wykonanie zapytania z użyciem QueryDSL
+
         JPAQuery<RideHistoryDto> query = new JPAQueryFactory(entityManager)
                 .select(Projections.bean(RideHistoryDto.class,
                         ride.uuid.as("rideUuid"),
@@ -153,7 +153,7 @@ public class RideService {
         BooleanBuilder predicate = new BooleanBuilder();
         predicate.and(ride.clientUuid.eq(clientUuid));
 
-        // Dodawanie filtrów
+
         if (searchCriteria.getStartDate() != null) {
             predicate.and(ride.createdAt.goe(searchCriteria.getStartDate()));
         }
@@ -162,7 +162,7 @@ public class RideService {
             predicate.and(ride.createdAt.loe(searchCriteria.getEndDate()));
         }
 
-        // Wykonanie zapytania z użyciem QueryDSL
+
         JPAQuery<RideHistoryDto> query = new JPAQueryFactory(entityManager)
                 .select(Projections.bean(RideHistoryDto.class,
                         ride.uuid.as("rideUuid"),
