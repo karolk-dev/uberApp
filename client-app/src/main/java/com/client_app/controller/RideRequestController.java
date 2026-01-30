@@ -29,7 +29,6 @@ public class RideRequestController {
 
     @PostMapping
     public ResponseEntity<RideRequestDto> createRideRequest(@Valid @RequestBody CreateRideRequestCommand command) {
-        log.info("przyjęto ządanie++++++++");
         RideRequestDto rideRequestDto = rideRequestService.createRideRequest(command);
         return ResponseEntity.status(HttpStatus.CREATED).body(rideRequestDto);
     }
